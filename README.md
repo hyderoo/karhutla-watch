@@ -2,6 +2,10 @@
 
 **Indonesia Fire & Smoke Intelligence** — an interactive monitoring dashboard for forest and land fires (*kebakaran hutan dan lahan*, "karhutla") in Indonesia.
 
+## Live demo
+
+[Open the live dashboard](https://karhutla-watch.vercel.app/)
+
 Built with React, TypeScript, and Vite. Deploys cleanly on Vercel, including an optional serverless proxy for NASA FIRMS so the API key never reaches the browser.
 
 ## What is live, what is demo
