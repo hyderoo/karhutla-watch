@@ -4,9 +4,9 @@ import { PROVINCES } from './data-provinces';
 import { MapView, Layers, FULL_VIEW, ViewState } from './MapView';
 import { LineChart, BarChart, Donut } from './charts';
 import {
-  CITIES, CityPoint, Hotspot, EonetEvent, SourceState, WeatherHourly, AqHourly,
+  CITIES, CityPoint, Hotspot, EonetEvent, SourceState, WeatherHourly, AqHourly, OpenAqStation,
   genDemoHotspots, proj, haversineKm, nearestCity, compass, pm25Band,
-  fmtWIB, fmtUTC, parseWIBNaive, latestIdx, fetchWeather, fetchAQ, fetchEonet, fetchFirms, PROVINCE_REGION, REGIONS,
+  fmtWIB, fmtUTC, parseWIBNaive, latestIdx, fetchWeather, fetchAQ, fetchEonet, fetchFirms, fetchOpenAq, PROVINCE_REGION, REGIONS,
 } from './lib';
 
 const RANGES = [
@@ -34,6 +34,7 @@ export function App() {
   const [chartCity, setChartCity] = useState<string>('palembang');
   const [refreshMin, setRefreshMin] = useState(5);
   const [firmsData, setFirmsData] = useState<Hotspot[] | null>(null);
+  const [openaq, setOpenaq] = useState<OpenAqStation[]>([]);
 
   const [weather, setWeather] = useState<Record<string, WeatherHourly>>({});
   const [aq, setAq] = useState<Record<string, AqHourly>>({});
@@ -75,6 +76,12 @@ export function App() {
         mark('demo', { status: 'off', detail: 'Replaced by the live NASA FIRMS feed.' });
       })
       .catch(() => mark('firms', { status: 'off', detail: 'No FIRMS_MAP_KEY configured (see README); showing demo hotspots' }));
+    fetchOpenAq()
+      .then((st) => {
+        setOpenaq(st);
+        mark('openaq', { kind: 'live', status: 'ok', lastOk: Date.now(), detail: st.length + ' ground stations reporting latest PM2.5/PM10' });
+      })
+      .catch(() => { setOpenaq([]); mark('openaq', { kind: 'off', status: 'off', detail: 'No OPENAQ_API_KEY configured (see README); ground stations not connected.' }); });
   };
 
   useEffect(() => { load(); }, []);
@@ -161,6 +168,12 @@ export function App() {
     if (v !== null && v > 55.4) alerts.push({ tone: 'danger', tag: 'LIVE', text: 'PM2.5 ' + Math.round(v) + ' ug/m3 (' + pm25Band(v).label + ') at ' + c.name + ', ' + a.time[li].replace('T', ' ') + ' WIB. Source: CAMS model via Open-Meteo.' });
     else if (v !== null && v > 35.4) alerts.push({ tone: 'warn', tag: 'LIVE', text: 'PM2.5 ' + Math.round(v) + ' ug/m3 (unhealthy for sensitive groups) at ' + c.name + '. Source: CAMS model via Open-Meteo.' });
   }
+  const stAlerts = [...openaq].filter((st) => st.pm25 !== null && st.pm25 > 35.4).sort((a, b) => (b.pm25 || 0) - (a.pm25 || 0)).slice(0, 3);
+  for (const st of stAlerts) {
+    const v = st.pm25!;
+    if (v > 55.4) alerts.push({ tone: 'danger', tag: 'LIVE', text: 'Ground station ' + st.name + ' (' + st.provider + ') measured PM2.5 ' + Math.round(v) + ' ug/m3 (' + pm25Band(v).label + ')' + (st.pm25Time ? ' at ' + fmtWIB(st.pm25Time) : '') + '. Source: OpenAQ ground measurement, not a model.' });
+    else alerts.push({ tone: 'warn', tag: 'LIVE', text: 'Ground station ' + st.name + ' (' + st.provider + ') measured PM2.5 ' + Math.round(v) + ' ug/m3 (unhealthy for sensitive groups). Source: OpenAQ ground measurement.' });
+  }
   for (const s of sources) if (s.kind === 'live' && s.status === 'error') alerts.push({ tone: 'danger', tag: 'FEED', text: s.label + ' feed failed: ' + (s.detail || 'network error') + '. Showing last known or empty state.' });
   if (ranking[0]) alerts.push({ tone: 'warn', tag: hotspotsLive ? 'LIVE' : 'DEMO RULE', text: (hotspotsLive ? 'Surge rule: ' : 'Simulated surge rule: ') + ranking[0].name + ' shows ' + ranking[0].n + (hotspotsLive ? ' FIRMS detections' : ' demo hotspots') + ' (' + ranking[0].hi + ' high-confidence) in the selected range.' + (hotspotsLive ? '' : ' Demonstration data only.') });
   if (eonet.length === 0 && sources.find((s) => s.key === 'eonet')?.status === 'ok') alerts.push({ tone: 'info', tag: 'LIVE', text: 'NASA EONET reports no open wildfire events in Indonesia right now.' });
@@ -192,6 +205,11 @@ export function App() {
   ];
 
   const chartCityObj = CITIES.find((c) => c.id === chartCity) || CITIES[0];
+  let nearStation: { st: OpenAqStation; km: number } | null = null;
+  for (const st of openaq) {
+    const km = haversineKm(chartCityObj.lat, chartCityObj.lon, st.lat, st.lon);
+    if (!nearStation || km < nearStation.km) nearStation = { st, km };
+  }
   const aqCity = aq[chartCityObj.id];
   const wxCity = weather[chartCityObj.id];
   const rangeSeries = (times: string[], vals: (number | null)[]) => {
@@ -270,7 +288,7 @@ export function App() {
           <div className="kw-meta">
             <div>Updated <b>{lastUpd}</b></div>
             <div className="kw-src-line">
-              <span className="chip chip-live">{"LIVE: wind, air quality, EONET" + (hotspotsLive ? ", FIRMS hotspots" : "")}</span>
+              <span className="chip chip-live">{"LIVE: wind, air quality, EONET" + (hotspotsLive ? ", FIRMS hotspots" : "") + (openaq.length ? ", OpenAQ ground stations" : "")}</span>
               <span className="chip chip-demo">{hotspotsLive ? "DEMO: smoke plumes only" : "DEMO: hotspots, smoke"}</span>
             </div>
           </div>
@@ -395,6 +413,14 @@ export function App() {
             { label: 'PM10', color: '#7dd3fc', values: pm10S.outV, dashed: true },
           ]} unit="ug/m3" height={150} />
           <div className="chart-src">CAMS atmospheric model via Open-Meteo - not ground-station readings.</div>
+          {nearStation && nearStation.st.pm25 !== null && (
+            <div className="chart-src">
+              Ground check: <b style={{ color: pm25Band(nearStation.st.pm25!).color }}>{nearStation.st.name}</b>
+              {' '}({Math.round(nearStation.km)} km away, {nearStation.st.provider}) measured PM2.5{' '}
+              <b>{Math.round(nearStation.st.pm25!)} ug/m3</b> ({pm25Band(nearStation.st.pm25!).label})
+              {nearStation.st.pm25Time ? ' at ' + fmtWIB(nearStation.st.pm25Time) : ''} via OpenAQ. Ground measurement; may differ from the CAMS model above.
+            </div>
+          )}
         </div>
         <div className="panel">
           <div className="panel-head"><h2>Wind speed - {chartCityObj.name}</h2><span className="tag tag-live">LIVE</span></div>

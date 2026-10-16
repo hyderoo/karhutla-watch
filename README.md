@@ -16,7 +16,8 @@ This dashboard is honest about its data. Every panel is labeled, and the data-so
 |---|---|---|---|
 | Wind speed & direction | **LIVE** | [Open-Meteo](https://open-meteo.com) | Keyless, CORS-enabled, 16 monitoring points |
 | Rainfall | **LIVE** | Open-Meteo | Same feed as wind |
-| PM2.5 / PM10 | **LIVE (model)** | Open-Meteo air quality (CAMS) | Atmospheric **model output, not ground-station readings**. Treat extreme values as a model signal, not a measurement |
+| PM2.5 / PM10 (model) | **LIVE (model)** | Open-Meteo air quality (CAMS) | Atmospheric **model output, not ground-station readings**. Treat extreme values as a model signal, not a measurement |
+| PM2.5 / PM10 (ground) | **LIVE when configured, otherwise NOT CONNECTED** | [OpenAQ](https://openaq.org) ground stations | Real measured readings from monitoring stations in Indonesia. Requires a free `OPENAQ_API_KEY` (see below). Shown as a "ground check" next to the CAMS model chart and in ground-station alerts |
 | Wildfire events | **LIVE** | [NASA EONET](https://eonet.gsfc.nasa.gov) | Open wildfire events in Indonesia; often zero |
 | Hotspots | **LIVE when configured, otherwise DEMO** | [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov) VIIRS SNPP | Requires a free `FIRMS_MAP_KEY` (see below). Without it, the dashboard shows clearly labeled **simulated** hotspots so the UI can be evaluated |
 | Smoke plumes | **MODELED** | Derived from live wind | Directional estimate only — **not** a measured plume |
@@ -47,6 +48,14 @@ The site works immediately with demo hotspots. To go live:
 2. In your Vercel project: **Settings → Environment Variables → `FIRMS_MAP_KEY`** = your key.
 3. Redeploy. The dashboard will call `/api/firms` (a serverless function in `api/firms.ts`), which proxies FIRMS server-side — the key is never exposed to the browser.
 
+## Enable OpenAQ ground stations
+
+1. Get a free API key: <https://explore.openaq.org> (create an account; the key is in your account settings).
+2. In your Vercel project: **Settings → Environment Variables → `OPENAQ_API_KEY`** = your key.
+3. Redeploy. The dashboard calls `/api/openaq` (a serverless function in `api/openaq.ts`), which proxies OpenAQ server-side — the key is never exposed to the browser.
+
+Proxy details: OpenAQ v3, Indonesia bbox `94,-12,142,7`, lists locations measuring PM2.5 and fetches the latest readings for the 30 with the most recent data, edge-cached 15 minutes. OpenAQ's free tier (60 requests/minute, 2,000/hour per key) stays comfortably out of reach at that cache rate. Ground-station readings are real measurements and can differ sharply from the CAMS model — the UI labels them as such. Data attribution: [OpenAQ](https://openaq.org), as required by its Terms of Use.
+
 Local testing of the proxy uses the Vercel CLI:
 
 ```bash
@@ -61,6 +70,7 @@ Proxy details: VIIRS SNPP near-real-time, Indonesia bbox `94,-12,142,7`, 5-day f
 - Weather & air quality: [Open-Meteo](https://open-meteo.com) (CAMS / forecast models)
 - Wildfire events: [NASA EONET](https://eonet.gsfc.nasa.gov)
 - Active fire hotspots (optional): [NASA FIRMS](https://firms.modaps.eosdis.nasa.gov)
+- Ground-station air quality (optional): [OpenAQ](https://openaq.org)
 - Province boundaries (38 provinces): [denyherianto/indonesia-geojson-topojson-maps-with-38-provinces](https://github.com/denyherianto/indonesia-geojson-topojson-maps-with-38-provinces)
 - PM2.5 bands: US EPA breakpoints
 
@@ -76,6 +86,7 @@ Proxy details: VIIRS SNPP near-real-time, Indonesia bbox `94,-12,142,7`, 5-day f
 
 ```
 api/firms.ts          Vercel serverless proxy for NASA FIRMS (keeps the key server-side)
+api/openaq.ts         Vercel serverless proxy for OpenAQ v3 (keeps the key server-side)
 src/
   App.tsx             dashboard shell, data loading, KPIs, ranking, alerts, charts
   MapView.tsx         SVG map: provinces, layers, pan/zoom, timeline playback

@@ -238,3 +238,20 @@ export async function fetchFirms(): Promise<Hotspot[]> {
   if (out.length === 0) throw new Error('FIRMS returned 0 detections');
   return out;
 }
+
+// --- OpenAQ ground stations through the server-side proxy (optional; see README)
+// Returns real measured readings from ground stations in Indonesia, or throws
+// when the proxy is unavailable / not configured (caller marks the source off).
+export interface OpenAqStation {
+  id: number; name: string; locality: string; lat: number; lon: number;
+  provider: string; monitor: boolean;
+  pm25: number | null; pm25Time: number | null;
+  pm10: number | null; pm10Time: number | null; unit: string;
+}
+export async function fetchOpenAq(): Promise<OpenAqStation[]> {
+  const r = await fetch('/api/openaq');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  if (!data || !Array.isArray(data.stations)) throw new Error('bad OpenAQ payload');
+  return data.stations as OpenAqStation[];
+}
