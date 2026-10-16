@@ -216,13 +216,24 @@ export async function fetchEonet(): Promise<EonetEvent[]> {
 }
 
 // --- NASA FIRMS through the server-side proxy (optional; see README)
-// Returns live VIIRS detections tagged with their province, or throws when
-// the proxy is unavailable / not configured (caller falls back to demo data).
-export async function fetchFirms(): Promise<Hotspot[]> {
+// The proxy aggregates the FULL 5-day feed server-side (per province, per
+// hour) and ships only the newest few thousand detections for the map.
+// Totals, ranking and charts must come from the aggregates, not the sample.
+export interface FirmsFeed {
+  sample: Hotspot[];           // newest detections, for the map only
+  total: number;               // all detections in the requested day range
+  oldest: number | null;       // oldest detection in the full feed (ms)
+  newest: number | null;       // newest detection in the full feed (ms)
+  truncated: boolean;          // true when total > sample.length
+  sampleOldest: number | null; // oldest detection included in the map sample (ms)
+  // province -> hourly aggregates over the FULL feed, ascending by hour
+  provHourly: Record<string, { t: number; n: number; hi: number; lo: number }[]>;
+}
+export async function fetchFirms(): Promise<FirmsFeed> {
   const r = await fetch('/api/firms?days=5');
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
-  if (!data || !Array.isArray(data.hotspots)) throw new Error('bad FIRMS payload');
+  if (!data || !Array.isArray(data.hotspots) || !data.provHourly) throw new Error('bad FIRMS payload');
   const out: Hotspot[] = [];
   for (const h of data.hotspots) {
     if (typeof h.lat !== 'number' || typeof h.lon !== 'number' || typeof h.ts !== 'number') continue;
@@ -236,7 +247,22 @@ export async function fetchFirms(): Promise<Hotspot[]> {
     });
   }
   if (out.length === 0) throw new Error('FIRMS returned 0 detections');
-  return out;
+  const provHourly: FirmsFeed['provHourly'] = {};
+  for (const [prov, arr] of Object.entries(data.provHourly as Record<string, number[][]>)) {
+    if (!Array.isArray(arr)) continue;
+    provHourly[prov] = arr
+      .filter((b) => Array.isArray(b) && typeof b[0] === 'number')
+      .map((b) => ({ t: b[0], n: b[1] || 0, hi: b[2] || 0, lo: b[3] || 0 }));
+  }
+  return {
+    sample: out,
+    total: typeof data.total === 'number' ? data.total : out.length,
+    oldest: typeof data.oldest === 'number' ? data.oldest : null,
+    newest: typeof data.newest === 'number' ? data.newest : null,
+    truncated: data.truncated === true,
+    sampleOldest: typeof data.sampleOldest === 'number' ? data.sampleOldest : null,
+    provHourly,
+  };
 }
 
 // --- OpenAQ ground stations through the server-side proxy (optional; see README)

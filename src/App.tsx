@@ -5,7 +5,7 @@ import { MapView, Layers, FULL_VIEW, ViewState } from './MapView';
 import { LineChart, BarChart, Donut } from './charts';
 import {
   CITIES, CityPoint, Hotspot, EonetEvent, SourceState, WeatherHourly, AqHourly, OpenAqStation,
-  genDemoHotspots, proj, haversineKm, nearestCity, compass, pm25Band,
+  FirmsFeed, genDemoHotspots, proj, haversineKm, nearestCity, compass, pm25Band,
   fmtWIB, fmtUTC, parseWIBNaive, latestIdx, fetchWeather, fetchAQ, fetchEonet, fetchFirms, fetchOpenAq, PROVINCE_REGION, REGIONS,
 } from './lib';
 
@@ -33,7 +33,7 @@ export function App() {
   const [selected, setSelected] = useState<Hotspot | null>(null);
   const [chartCity, setChartCity] = useState<string>('palembang');
   const [refreshMin, setRefreshMin] = useState(5);
-  const [firmsData, setFirmsData] = useState<Hotspot[] | null>(null);
+  const [firmsFeed, setFirmsFeed] = useState<FirmsFeed | null>(null);
   const [openaq, setOpenaq] = useState<OpenAqStation[]>([]);
 
   const [weather, setWeather] = useState<Record<string, WeatherHourly>>({});
@@ -50,8 +50,8 @@ export function App() {
   ]);
 
   const demoHotspots = useMemo(() => genDemoHotspots(Date.now(), PROVINCES as any), []);
-  const hotspots = firmsData ?? demoHotspots;
-  const hotspotsLive = firmsData !== null;
+  const hotspots = firmsFeed ? firmsFeed.sample : demoHotspots;
+  const hotspotsLive = firmsFeed !== null;
   const hTag = hotspotsLive
     ? <span className="tag tag-live">LIVE - NASA FIRMS</span>
     : <span className="tag tag-demo">DEMO</span>;
@@ -70,9 +70,12 @@ export function App() {
       .then((ev) => { setEonet(ev); mark('eonet', { status: 'ok', lastOk: Date.now(), detail: ev.length + ' open events in Indonesia' }); })
       .catch((e) => mark('eonet', { status: 'error', detail: String(e && e.message || e) }));
     fetchFirms()
-      .then((hs) => {
-        setFirmsData(hs);
-        mark('firms', { kind: 'live', status: 'ok', lastOk: Date.now(), detail: hs.length + ' VIIRS SNPP detections, past 5 days' });
+      .then((feed) => {
+        setFirmsFeed(feed);
+        mark('firms', {
+          kind: 'live', status: 'ok', lastOk: Date.now(),
+          detail: feed.total.toLocaleString('en-US') + ' VIIRS SNPP detections, past 5 days' + (feed.truncated ? '; map draws the latest ' + feed.sample.length.toLocaleString('en-US') : ''),
+        });
         mark('demo', { status: 'off', detail: 'Replaced by the live NASA FIRMS feed.' });
       })
       .catch(() => mark('firms', { status: 'off', detail: 'No FIRMS_MAP_KEY configured (see README); showing demo hotspots' }));
@@ -119,6 +122,29 @@ export function App() {
   const highConf = visible.filter((h) => h.conf === 'high');
   const affected = new Set(visible.map((h) => h.province));
 
+  // Full-feed aggregates (live FIRMS only): per-province hourly counts over
+  // the whole feed, filtered to the current window and region/province.
+  // Totals, ranking and charts use these; the map only draws the sample.
+  const agg = useMemo(() => {
+    if (!firmsFeed) return null;
+    let n = 0, hi = 0, lo = 0;
+    const prov = new Map<string, { n: number; hi: number; latest: number }>();
+    const perHour = new Map<number, number>();
+    for (const [name, arr] of Object.entries(firmsFeed.provHourly)) {
+      if (region !== 'all' && PROVINCE_REGION[name] !== region) continue;
+      if (province !== 'all' && name !== province) continue;
+      let pn = 0, phi = 0, latest = 0;
+      for (const b of arr) {
+        if (b.t + 3600e3 <= rangeStart || b.t >= cursorTs) continue;
+        n += b.n; hi += b.hi; lo += b.lo;
+        pn += b.n; phi += b.hi; latest = Math.max(latest, b.t);
+        perHour.set(b.t, (perHour.get(b.t) || 0) + b.n);
+      }
+      if (pn > 0) prov.set(name, { n: pn, hi: phi, latest });
+    }
+    return { n, hi, lo, prov, perHour };
+  }, [firmsFeed, rangeStart, cursorTs, region, province]);
+
   // live AQ KPI: worst current PM2.5
   let worstPm: { v: number; city: CityPoint; t: string } | null = null;
   for (const c of CITIES) {
@@ -137,11 +163,16 @@ export function App() {
 
   // ranking by province
   const ranking = useMemo(() => {
-    const m = new Map<string, { n: number; hi: number; latest: number }>();
-    for (const h of visible) {
-      const r = m.get(h.province) || { n: 0, hi: 0, latest: 0 };
-      r.n++; if (h.conf === 'high') r.hi++; r.latest = Math.max(r.latest, h.ts);
-      m.set(h.province, r);
+    let m: Map<string, { n: number; hi: number; latest: number }>;
+    if (agg) {
+      m = agg.prov;
+    } else {
+      m = new Map<string, { n: number; hi: number; latest: number }>();
+      for (const h of visible) {
+        const r = m.get(h.province) || { n: 0, hi: 0, latest: 0 };
+        r.n++; if (h.conf === 'high') r.hi++; r.latest = Math.max(r.latest, h.ts);
+        m.set(h.province, r);
+      }
     }
     return [...m.entries()].map(([name, r]) => {
       const bb = PROV_BBOX.get(name);
@@ -157,7 +188,7 @@ export function App() {
         windSpd: wi >= 0 ? w!.wind_speed_10m[wi] : null,
       };
     }).sort((a, b) => b.n - a.n).slice(0, 8);
-  }, [visible, aq, weather, now]);
+  }, [agg, visible, aq, weather, now]);
 
   // alerts
   const alerts: { tone: 'danger' | 'warn' | 'info'; tag: string; text: string }[] = [];
@@ -189,20 +220,33 @@ export function App() {
       const t0 = rangeStart + ((i + 1) / n) * range.ms;
       labels.push(new Date(t0).toLocaleString('en-GB', bucketHourly ? { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false } : { timeZone: 'Asia/Jakarta', day: '2-digit', month: 'short' }));
     }
-    for (const h of visible) {
-      const f = (h.ts - rangeStart) / range.ms;
-      if (f >= 0 && f < 1) arr[Math.min(n - 1, Math.floor(f * n))]++;
+    if (agg) {
+      for (const [t, c] of agg.perHour) {
+        const f = (t - rangeStart) / range.ms;
+        if (f >= 0 && f < 1) arr[Math.min(n - 1, Math.floor(f * n))] += c;
+      }
+    } else {
+      for (const h of visible) {
+        const f = (h.ts - rangeStart) / range.ms;
+        if (f >= 0 && f < 1) arr[Math.min(n - 1, Math.floor(f * n))]++;
+      }
     }
     return { arr, labels };
-  }, [visible, rangeKey, rangeStart]);
+  }, [agg, visible, rangeKey, rangeStart]);
 
   const provBars = ranking.slice(0, 8).map((r) => ({ label: r.name.replace('Kalimantan', 'Kal.').replace('Sumatera', 'Sum.').replace('Nusa Tenggara', 'NT').replace('Daerah Istimewa Yogyakarta', 'DIY'), value: r.n }));
 
-  const confDonut = [
-    { label: 'High confidence', value: visible.filter((h) => h.conf === 'high').length, color: '#ef4444' },
-    { label: 'Nominal', value: visible.filter((h) => h.conf === 'nominal').length, color: '#f59e0b' },
-    { label: 'Low', value: visible.filter((h) => h.conf === 'low').length, color: '#38bdf8' },
-  ];
+  const confDonut = agg
+    ? [
+        { label: 'High confidence', value: agg.hi, color: '#ef4444' },
+        { label: 'Nominal', value: Math.max(0, agg.n - agg.hi - agg.lo), color: '#f59e0b' },
+        { label: 'Low', value: agg.lo, color: '#38bdf8' },
+      ]
+    : [
+        { label: 'High confidence', value: visible.filter((h) => h.conf === 'high').length, color: '#ef4444' },
+        { label: 'Nominal', value: visible.filter((h) => h.conf === 'nominal').length, color: '#f59e0b' },
+        { label: 'Low', value: visible.filter((h) => h.conf === 'low').length, color: '#38bdf8' },
+      ];
 
   const chartCityObj = CITIES.find((c) => c.id === chartCity) || CITIES[0];
   let nearStation: { st: OpenAqStation; km: number } | null = null;
@@ -307,9 +351,9 @@ export function App() {
 
       {/* ===== KPI cards ===== */}
       <section className="kpis">
-        <div className="kpi"><div className="kpi-label">Active hotspots {hTag}</div><div className="kpi-val">{visible.length}</div><div className="kpi-sub">{hotspotsLive ? 'NASA FIRMS VIIRS detections' : 'simulated detections'}, {range.label} range</div></div>
-        <div className="kpi"><div className="kpi-label">High confidence {hTag}</div><div className="kpi-val kpi-red">{highConf.length}</div><div className="kpi-sub">{hotspotsLive ? 'FIRMS confidence class' : 'simulated, FIRMS-style class'}</div></div>
-        <div className="kpi"><div className="kpi-label">Provinces affected {hTag}</div><div className="kpi-val">{affected.size}</div><div className="kpi-sub">of 38 provinces</div></div>
+        <div className="kpi"><div className="kpi-label">Active hotspots {hTag}</div><div className="kpi-val">{agg ? agg.n.toLocaleString('en-US') : visible.length}</div><div className="kpi-sub">{hotspotsLive ? 'NASA FIRMS VIIRS, full-feed hourly aggregate' : 'simulated detections'}, {range.label} range</div></div>
+        <div className="kpi"><div className="kpi-label">High confidence {hTag}</div><div className="kpi-val kpi-red">{agg ? agg.hi.toLocaleString('en-US') : highConf.length}</div><div className="kpi-sub">{hotspotsLive ? 'FIRMS confidence class' : 'simulated, FIRMS-style class'}</div></div>
+        <div className="kpi"><div className="kpi-label">Provinces affected {hTag}</div><div className="kpi-val">{agg ? agg.prov.size : affected.size}</div><div className="kpi-sub">of 38 provinces</div></div>
         <div className="kpi"><div className="kpi-label">Worst PM2.5 <span className="tag tag-live">LIVE</span></div>
           {worstPm ? (<><div className="kpi-val" style={{ color: pm25Band(worstPm.v).color }}>{Math.round(worstPm.v)}<span className="kpi-unit">ug/m3</span></div><div className="kpi-sub">{worstPm.city.name} - {pm25Band(worstPm.v).label} - {worstPm.t.replace('T', ' ')} WIB (CAMS model)</div></>)
             : <div className="kpi-val kpi-na">--</div>}
@@ -344,7 +388,9 @@ export function App() {
               aria-label="Timeline" />
             <span className="timeline-label">{cursor === null ? 'Latest: ' + fmtWIB(now) : fmtWIB(cursorTs)}</span>
           </div>
-          <div className="map-note">{hotspotsLive ? <>Hotspots are <b>live NASA FIRMS detections</b>; smoke drift is a directional estimate from live wind, not a measured plume.</> : <>Hotspots and smoke on this map are <b>simulated demo data</b>; smoke drift uses live wind but is a directional estimate, not a measured plume.</>} Wind, PM2.5 and EONET markers are live.</div>
+          <div className="map-note">{hotspotsLive ? <>Hotspots are <b>live NASA FIRMS detections</b>; smoke drift is a directional estimate from live wind, not a measured plume.</> : <>Hotspots and smoke on this map are <b>simulated demo data</b>; smoke drift uses live wind but is a directional estimate, not a measured plume.</>}
+            {hotspotsLive && firmsFeed?.truncated && firmsFeed.sampleOldest ? <> The map draws the <b>{firmsFeed.sample.length.toLocaleString('en-US')} most recent</b> detections (about the last {Math.max(1, Math.round(((firmsFeed.newest ?? now) - firmsFeed.sampleOldest) / 3600e3))} hours); totals, ranking and charts count the <b>full {firmsFeed.total.toLocaleString('en-US')}</b> detections via hourly server-side aggregates.</> : null}
+            {' '}Wind, PM2.5 and EONET markers are live.</div>
         </section>
 
         <aside className="side">
