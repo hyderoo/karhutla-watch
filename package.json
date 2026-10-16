@@ -1,0 +1,23 @@
+{
+  "name": "karhutla-watch",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Indonesia fire and smoke monitoring dashboard (portfolio project)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.6.2",
+    "vite": "^5.4.11"
+  }
+}

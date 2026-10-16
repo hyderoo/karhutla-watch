@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+*.local
+.vercel
+.DS_Store
+
+# local env files - never commit secrets
+.env
+.env.*
+!.env.example
