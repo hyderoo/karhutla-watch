@@ -54,7 +54,7 @@ cp .env.example .env   # paste your key into .env (gitignored)
 npx vercel dev         # serves the site AND /api/firms locally
 ```
 
-Proxy details: VIIRS SNPP near-real-time, Indonesia bbox `94,-12,142,7`, 7-day feed, capped at 3,000 most recent detections, edge-cached 15 minutes.
+Proxy details: VIIRS SNPP near-real-time, Indonesia bbox `94,-12,142,7`, 5-day feed, capped at 3,000 most recent detections, edge-cached 15 minutes.
 
 ## Data sources & attribution
 

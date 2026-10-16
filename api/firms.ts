@@ -41,7 +41,8 @@ export default async function handler(req: any, res: any) {
   }
   const q = req.query || {};
   const sensor = SENSORS[String(q.sensor || 'viirs')] || SENSORS.viirs;
-  const days = Math.min(10, Math.max(1, parseInt(String(q.days || '1'), 10) || 1));
+  // Upstream FIRMS currently rejects day ranges above 5 for this feed (HTTP 400), so clamp here.
+  const days = Math.min(5, Math.max(1, parseInt(String(q.days || '5'), 10) || 5));
   const upstream = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${key}/${sensor}/${BBOX}/${days}`;
   try {
     const r = await fetch(upstream);

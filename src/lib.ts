@@ -219,7 +219,7 @@ export async function fetchEonet(): Promise<EonetEvent[]> {
 // Returns live VIIRS detections tagged with their province, or throws when
 // the proxy is unavailable / not configured (caller falls back to demo data).
 export async function fetchFirms(): Promise<Hotspot[]> {
-  const r = await fetch('/api/firms?days=7');
+  const r = await fetch('/api/firms?days=5');
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   if (!data || !Array.isArray(data.hotspots)) throw new Error('bad FIRMS payload');

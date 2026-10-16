@@ -71,7 +71,7 @@ export function App() {
     fetchFirms()
       .then((hs) => {
         setFirmsData(hs);
-        mark('firms', { kind: 'live', status: 'ok', lastOk: Date.now(), detail: hs.length + ' VIIRS SNPP detections, 7-day feed' });
+        mark('firms', { kind: 'live', status: 'ok', lastOk: Date.now(), detail: hs.length + ' VIIRS SNPP detections, past 5 days' });
         mark('demo', { status: 'off', detail: 'Replaced by the live NASA FIRMS feed.' });
       })
       .catch(() => mark('firms', { status: 'off', detail: 'No FIRMS_MAP_KEY configured (see README); showing demo hotspots' }));
