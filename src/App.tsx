@@ -370,7 +370,7 @@ export function App() {
           <div className="panel-head">
             <h2>Fire &amp; smoke map</h2>
             <div className="layer-toggles">
-              {([['hotspots', 'Hotspots (demo)'], ['heat', 'Heatmap'], ['smoke', 'Smoke (modeled)'], ['wind', 'Wind'], ['aq', 'PM2.5'], ['cities', 'Cities'], ['eonet', 'EONET']] as [keyof Layers, string][]).map(([k, label]) => (
+              {([['hotspots', hotspotsLive ? 'Hotspots (live FIRMS)' : 'Hotspots (demo)'], ['heat', 'Heatmap'], ['smoke', 'Smoke (modeled)'], ['wind', 'Wind'], ['aq', 'PM2.5'], ['cities', 'Cities'], ['eonet', 'EONET']] as [keyof Layers, string][]).map(([k, label]) => (
                 <button key={k} className={layers[k] ? 'on' : ''} onClick={() => setLayers({ ...layers, [k]: !layers[k] })}>{label}</button>
               ))}
             </div>
@@ -491,7 +491,7 @@ export function App() {
           </label>
         </div>
         <div className="source-grid">
-          {sources.map((s) => (
+          {sources.filter((s) => s.key !== 'demo' || !hotspotsLive).map((s) => (
             <div key={s.key} className="source-card">
               <div className="source-top">
                 <span className={'status-dot ' + (s.status === 'ok' ? 'ok' : s.status === 'error' ? 'err' : s.status === 'loading' ? 'load' : 'off')} />
