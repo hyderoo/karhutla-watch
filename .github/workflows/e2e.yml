@@ -1,0 +1,41 @@
+name: e2e
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 30
+      - name: Publish report to the gh-pages branch
+        if: always() && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          cp -r playwright-report /tmp/site && touch /tmp/site/.nojekyll
+          git checkout --orphan gh-pages && git rm -rf . -q && git clean -fdxq
+          cp -r /tmp/site/. . && git add -A
+          git commit -qm "Playwright report for ${GITHUB_SHA::7}" && git push -f origin gh-pages

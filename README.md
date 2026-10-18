@@ -104,3 +104,7 @@ React 18 · TypeScript · Vite · Vercel serverless functions · zero UI-framewo
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Testing
+
+End-to-end tests with Playwright run in GitHub Actions against the deployed app ([workflow](.github/workflows/e2e.yml), [latest report](https://hyderoo.github.io/karhutla-watch/)). Covered: app load with map and timeline, honest live/demo labelling of the hotspot layer, time-range and region filters, theme toggle, and location search. Not covered: unit tests, the serverless FIRMS proxy, and map-internal interactions.
