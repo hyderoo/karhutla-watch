@@ -35,7 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          cp -r playwright-report /tmp/site && touch /tmp/site/.nojekyll
+          cp -r playwright-report /tmp/site && touch /tmp/site/.nojekyll && printf '%s' '{"git":{"deploymentEnabled":{"gh-pages":false}}}' > /tmp/site/vercel.json
           git checkout --orphan gh-pages && git rm -rf . -q && git clean -fdxq
           cp -r /tmp/site/. . && git add -A
           git commit -qm "Playwright report for ${GITHUB_SHA::7}" && git push -f origin gh-pages
