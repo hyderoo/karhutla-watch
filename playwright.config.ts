@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 // E2E runs against the deployed app by default; set E2E_BASE_URL to test a local build.
 export default defineConfig({
   testDir: './tests',
+  testIgnore: '**/unit/**',
   timeout: 60_000,
   expect: { timeout: 15_000 },
   retries: process.env.CI ? 1 : 0,

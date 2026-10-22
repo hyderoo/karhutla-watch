@@ -107,4 +107,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Testing
 
-End-to-end tests with Playwright run in GitHub Actions against the deployed app ([workflow](.github/workflows/e2e.yml), [latest report](https://hyderoo.github.io/karhutla-watch/)). Covered: app load with map and timeline, honest live/demo labelling of the hotspot layer, time-range and region filters, theme toggle, and location search. Not covered: unit tests, the serverless FIRMS proxy, and map-internal interactions.
+Unit tests with Vitest (21 tests over `src/lib.ts`: seeded RNG, distance/geo helpers, compass, PM2.5 EPA bands, projection round-trip, WIB time parsing, province lookup and demo-hotspot generation) and end-to-end tests with Playwright run in GitHub Actions on every push ([workflow](.github/workflows/e2e.yml), [latest report](https://hyderoo.github.io/karhutla-watch/)). E2E covered: app load with map and timeline, honest live/demo labelling of the hotspot layer, time-range and region filters, theme toggle, location search, and map interactions (hotspot drawer with SIMULATED tag, zoom controls, drag pan, layer toggles, province click-to-zoom). Not covered: the serverless FIRMS proxy with a real key.
