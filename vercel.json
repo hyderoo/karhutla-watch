@@ -42,6 +42,17 @@
       ],
       "destination": "https://karhutlawatch.web.id/:path*",
       "permanent": true
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "karhutla-watch.vercel.app"
+        }
+      ],
+      "destination": "https://karhutlawatch.web.id",
+      "permanent": true
     }
   ]
 }
