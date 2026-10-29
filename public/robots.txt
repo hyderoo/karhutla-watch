@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://karhutlawatch.web.id/sitemap.xml
